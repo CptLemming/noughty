@@ -1,0 +1,9 @@
+{
+  "name": "noughty-socket",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "socket.io": "~0.9.16",
+    "cookie": "~0.1.2"
+  }
+}

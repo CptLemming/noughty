@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html ng-app="app">
+<head>
+  <title>Noughty</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <style>
+    .board-container {
+        width: 300px;
+        height: 300px;
+        margin: 0 auto;
+        border: 1px solid black;
+        list-style: none;
+        padding: 0;
+    }
+    
+    .board-container .board-column {
+        width: 97px;
+        height: 99px;
+        line-height: 99px;
+        text-align: center;
+        vertical-align: middle;
+        display: inline-block;
+    }
+    
+    .board-container .board-column:hover {
+        background-color: #EDEDED;
+    }
+    
+    .board-container .board-column.piece-none {
+        cursor: pointer;
+    }
+    
+    .board-container .board-column.piece-x {
+        background-color: green;
+        cursor: not-allowed;
+    }
+    
+    .board-container .board-column.piece-y {
+        background-color: blue;
+        cursor: not-allowed;
+    }
+  </style>
+  
+  <script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/angularjs/1.0.7/angular.min.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js" type="text/javascript"></script>
+  <script src="http://192.168.0.22:4000/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div ng-controller="MainController">
+      <!-- Chat -->
+      <ul id="comments">
+        {% verbatim %}<li ng-repeat="comment in comments">{{comment.message}}</li>{% endverbatim %}
+      </ul>
+      <input type="text" id="comment" name="comment" ng-model="text"/>
+      
+      {% if current_game.started %}
+      <!-- Board -->
+      <div>
+          <ul class="board-container" id="board">
+              {% verbatim %}<li class="board-column piece-{{move.piece}}" data-position_x="{{move.x}}" data-position_y="{{move.y}}" ng-repeat="move in board">{{move.piece}}</li>{% endverbatim %}
+          </ul>
+      </div>
+      {% endif %}
+  </div>
+  
+  <script>
+    var app = angular.module('app', []);
+    
+    app.controller('MainController', function($scope){
+      $scope.comments = [{% for comment in comments %}{message:'{{comment.user}}: {{comment.text}}'},{% endfor %}];
+      $scope.text = '';
+      $scope.board = [{% for piece in board %} {'x': '{{piece.x}}', 'y': '{{piece.y}}', 'piece': '{{piece.piece}}'},{% endfor %}];
+      
+      $scope.addComment = function(msg) {
+      	$scope.comments.push({message: msg});
+      	$scope.text = '';
+      }
+      
+      $scope.makeMove = function(x, y) {
+        for (var key in $scope.board) {
+            if ($scope.board[key]['x'] == x && $scope.board[key]['y'] == y) {
+                $scope.board[key]['piece'] = 'x';
+            }
+        }
+        
+        console.log($scope);
+      }
+      
+      var socket = io.connect('192.168.0.22', {port: 4000});
+
+      socket.on('connect', function(){
+        console.log("connect");
+      });
+
+      var entry_el = $('#comment');
+
+      socket.on('message', function(message){
+        // Escape HTML chars
+        var data = message.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+        // Append message to the bottom of the list
+        $scope.$apply(function(){
+          $scope.addComment(data);
+        });
+        
+        window.scrollBy(0, 1000000000000);
+        entry_el.focus();
+      });
+      
+      socket.on('user:left', function(data){
+          console.log('User disconnected', data.name);
+      });
+      
+      socket.on('user:join', function(data){
+          console.log('User joined', data.name);
+      });
+
+      entry_el.keypress(function(event){
+        // When enter is pressed send input value to node server
+        if (event.keyCode != 13) return;
+        var msg = $scope.text;
+        if (msg) {
+          socket.emit('send:message', msg, function(data){
+            console.log(data);
+          });
+        }
+      });
+      
+      $(document.body).on('click', '#board li', function(){
+          var $this = $(this)
+          if ($this.hasClass('piece-x') || $this.hasClass('piece-y')) return;
+          
+          var x = $this.data('position_x');
+          var y = $this.data('position_y');
+          
+          socket.emit('board:move', '{"x": "'+ x +'", "y": "'+ y +'"}', function(data){
+              console.log(data);
+          });
+      });
+      
+      socket.on('move:made', function(data){
+          $scope.$apply(function(){
+              $scope.makeMove(data.position_x, data.position_y);
+          });
+      });
+    });
+  </script>
+</body>
+</html>
